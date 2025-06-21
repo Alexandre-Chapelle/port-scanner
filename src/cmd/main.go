@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -10,6 +11,39 @@ import (
 	"github.com/Alexandre-Chapelle/port-scanner/src/internal/scanner"
 	"github.com/Alexandre-Chapelle/port-scanner/src/internal/ui"
 )
+
+func printHelp() {
+	ui.PrintfInfo("Port Scanner - Network Port Discovery Tool")
+	ui.PrintfInfo("==============================================")
+	ui.PrintfInfo("")
+	ui.PrintfInfo("USAGE:")
+	ui.PrintfInfo("  ./port-scanner [OPTIONS]")
+	ui.PrintfInfo("")
+	ui.PrintfInfo("TARGET OPTIONS:")
+	ui.PrintfInfo("  -target, -t <url>           Target host to scan (default: 127.0.0.1)")
+	ui.PrintfInfo("  -port-range, -p <range>     Port range to scan (default: 1-65535)")
+	ui.PrintfInfo("                              Examples: 80, 80-443, 1-1000")
+	ui.PrintfInfo("")
+	ui.PrintfInfo("SCAN OPTIONS:")
+	ui.PrintfInfo("  -threads, -ts <number>      Number of concurrent threads (default: 100)")
+	ui.PrintfInfo("  -protocol, -proc <proto>    Protocol to use (default: tcp)")
+	ui.PrintfInfo("                              Options: tcp, tcp4, tcp6, udp, udp4, udp6")
+	ui.PrintfInfo("")
+	ui.PrintfInfo("OUTPUT OPTIONS:")
+	ui.PrintfInfo("  -verbose, -v                Enable verbose output")
+	ui.PrintfInfo("  -debug, -d                  Enable debug output")
+	ui.PrintfInfo("  -output, -o <file>          Save results to file")
+	ui.PrintfInfo("  -output-format, -of <fmt>   Output format (PLAIN | HTML)")
+	ui.PrintfInfo("")
+	ui.PrintfInfo("HELP:")
+	ui.PrintfInfo("  -help, -h                   Show this help message")
+	ui.PrintfInfo("")
+	ui.PrintfInfo("EXAMPLES:")
+	ui.PrintfInfo("  ./port-scanner -t 192.168.1.1 -p 1-1000 -v")
+	ui.PrintfInfo("  ./port-scanner --target google.com --port-range 80,443 --threads 50")
+	ui.PrintfInfo("  ./port-scanner -t 10.0.0.1 -p 20-25 -o results.html -of HTML")
+	ui.PrintfInfo("")
+}
 
 func initFlags() (t string, pR string, th int, v bool, d bool, o string, of string, proc string) {
 	var target string
@@ -20,6 +54,7 @@ func initFlags() (t string, pR string, th int, v bool, d bool, o string, of stri
 	var outputFile string
 	var outputFormat string
 	var protocol string
+	var help bool
 
 	flag.StringVar(&target, "target", "127.0.0.1", "[--target <url>] Specifies the target to scan")
 	flag.StringVar(&target, "t", "127.0.0.1", "[-t <url>] Specifies the target to scan (short)")
@@ -45,13 +80,23 @@ func initFlags() (t string, pR string, th int, v bool, d bool, o string, of stri
 	flag.StringVar(&protocol, "protocol", "tcp", "[--protocol <tcp | tcp4 | tcp6 | udp | udp4 | udp6 | ip | ip4 | ip6 | unix | unixgram and unixpacket>] Specifies the protocol to use")
 	flag.StringVar(&protocol, "proc", "tcp", "[-proc <tcp | tcp4 | tcp6 | udp | udp4 | udp6 | ip | ip4 | ip6 | unix | unixgram and unixpacket>] Specifies the protocol to use (short)")
 
+	flag.BoolVar(&help, "help", false, "[--help] Get help")
+	flag.BoolVar(&help, "h", false, "[-h] Get help (short)")
+
 	flag.Parse()
+
+	if help {
+		printHelp()
+		os.Exit(0)
+	}
 
 	return target, portRange, threads, verbose, debug, outputFile, outputFormat, protocol
 }
 
 func main() {
 	target, portRange, threads, verbose, debug, outputFile, outputFormat, protocol := initFlags()
+
+	ui.PrintfInfo("[+] Started scan for target %s on ports ", target, portRange)
 
 	scanner := scanner.New(
 		scanner.Config{
@@ -76,7 +121,7 @@ func main() {
 		}
 	}
 
-	ui.PrintfSuc("========================= OPEN PORTS ===========================")
+	ui.PrintfSuc("\n\n========================= OPEN PORTS ===========================\n")
 
 	sort.Ints(resultPorts)
 	for _, p := range resultPorts {
