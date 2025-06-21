@@ -4,8 +4,7 @@ import (
 	"flag"
 	"os"
 	"sort"
-	"strconv"
-	"strings"
+	"time"
 
 	"github.com/Alexandre-Chapelle/port-scanner/src/internal/output"
 	"github.com/Alexandre-Chapelle/port-scanner/src/internal/scanner"
@@ -94,9 +93,10 @@ func initFlags() (t string, pR string, th int, v bool, d bool, o string, of stri
 }
 
 func main() {
+	start := time.Now()
 	target, portRange, threads, verbose, debug, outputFile, outputFormat, protocol := initFlags()
 
-	ui.PrintfInfo("[+] Started scan for target %s on ports ", target, portRange)
+	ui.PrintfInfo("[~] Started scan for target %s on ports %s", target, portRange)
 
 	scanner := scanner.New(
 		scanner.Config{
@@ -121,21 +121,31 @@ func main() {
 		}
 	}
 
-	ui.PrintfSuc("\n\n========================= OPEN PORTS ===========================\n")
-
-	sort.Ints(resultPorts)
-	for _, p := range resultPorts {
-		ui.PrintfSuc("[+] %d", p)
-	}
+	tElapsed := time.Since(start)
 
 	if outputFile != "" {
-		strP := make([]string, len(resultPorts))
-		for i, v := range resultPorts {
-			strP[i] = strconv.Itoa(v)
+
+		switch outputFormat {
+		case "HTML":
+			html, err := output.FormatHTML(resultPorts, target, portRange, tElapsed)
+			if err != nil {
+				ui.PrintfErr("[-] Error while creating HTML template")
+			}
+			output.OutputToFile(outputFile, html, "html")
+			ui.PrintfInfo("[~] Generated HTML report in %s file", outputFile)
+
+		case "PLAIN":
+			plain := output.FormatPlain(resultPorts, target, tElapsed)
+			output.OutputToFile(outputFile, plain, "txt")
+			ui.PrintfInfo("[~] Generated PLAIN report in %s file", outputFile)
+
+		default:
+			ui.PrintfSuc("\n\n========================= OPEN PORTS ===========================\n")
+			sort.Ints(resultPorts)
+			for _, p := range resultPorts {
+				ui.PrintfSuc("[+] %d", p)
+			}
 		}
 
-		d := strings.Join(strP, "\n")
-
-		output.OutputToFile(outputFile, d, outputFormat)
 	}
 }
