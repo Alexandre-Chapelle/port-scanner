@@ -2,98 +2,14 @@ package main
 
 import (
 	"flag"
-	"fmt"
-	"net"
-	"os"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/Alexandre-Chapelle/port-scanner/src/internal/output"
+	"github.com/Alexandre-Chapelle/port-scanner/src/internal/scanner"
+	"github.com/Alexandre-Chapelle/port-scanner/src/internal/ui"
 )
-
-const (
-	colorRed   = "\033[31m"
-	colorGreen = "\033[32m"
-	colorBlue  = "\033[34m"
-	colorReset = "\033[0m"
-)
-
-func PrintfErr(format string, a ...any) {
-	fmt.Printf("%s"+format+"%s\n", append([]any{colorRed}, append(a, colorReset)...)...)
-}
-
-func PrintfSuc(format string, a ...any) {
-	fmt.Printf("%s"+format+"%s\n", append([]any{colorGreen}, append(a, colorReset)...)...)
-}
-
-func PrintfInfo(format string, a ...any) {
-	fmt.Printf("%s"+format+"%s\n", append([]any{colorBlue}, append(a, colorReset)...)...)
-}
-
-func worker(v bool, d bool, proc string, t string, pp chan int, ports chan int) {
-	for p := range ports {
-
-		address := net.JoinHostPort(t, fmt.Sprintf("%d", p))
-		conn, err := net.Dial(proc, address)
-
-		if err != nil {
-			if d {
-				PrintfErr(err.Error())
-			}
-
-			pp <- 0
-
-			if v {
-				PrintfErr("[-] Port %d is closed", p)
-			}
-
-			continue
-		}
-
-		if v {
-			PrintfSuc("[+] Port %d is open", p)
-		}
-
-		pp <- p
-
-		conn.Close()
-	}
-}
-
-func poolPorts(ports chan int, sPort int, ePort int, d bool) {
-	for i := sPort; i <= ePort; i++ {
-		ports <- i
-
-		if d {
-			PrintfInfo("[~] Added port %d to queue", i)
-		}
-	}
-}
-
-func parsePortsArg(portsArg string) (start int, end int) {
-	re := regexp.MustCompile(`\d+-\d+`)
-	unformattedPorts := re.FindString(portsArg)
-
-	if unformattedPorts == "" {
-		return 0, 0
-	}
-
-	ports := strings.Split(unformattedPorts, "-")
-
-	startPort, err := strconv.Atoi(ports[0])
-
-	if err != nil {
-		return 0, 0
-	}
-
-	endPort, err := strconv.Atoi(ports[1])
-
-	if err != nil {
-		return 0, 0
-	}
-
-	return startPort, endPort
-}
 
 func initFlags() (t string, pR string, th int, v bool, d bool, o string, of string, proc string) {
 	var target string
@@ -134,45 +50,37 @@ func initFlags() (t string, pR string, th int, v bool, d bool, o string, of stri
 	return target, portRange, threads, verbose, debug, outputFile, outputFormat, protocol
 }
 
-func outputToFile(fileName string, d string, of string) {
-	err := os.WriteFile(fileName, []byte(d), 0755)
-
-	if err != nil {
-		PrintfErr("[-] Cannot write to file %s", fileName)
-	}
-}
-
 func main() {
-	var resultPorts []int
-	processedPorts := make(chan int)
-
 	target, portRange, threads, verbose, debug, outputFile, outputFormat, protocol := initFlags()
 
-	sPort, ePort := parsePortsArg(portRange)
-	ports := make(chan int, threads)
+	scanner := scanner.New(
+		scanner.Config{
+			Target:       target,
+			PortRange:    portRange,
+			Threads:      threads,
+			Verbose:      verbose,
+			Debug:        debug,
+			OutputFile:   outputFile,
+			OutputFormat: outputFormat,
+			Protocol:     protocol,
+		},
+	)
 
-	for i := 0; i < threads; i++ {
-		go worker(verbose, debug, protocol, target, processedPorts, ports)
-	}
+	resultPorts, err := scanner.Scan()
 
-	go poolPorts(ports, sPort, ePort, debug)
+	if err != nil {
+		ui.PrintfErr("[-] Cannot retrieve result ports")
 
-	for range ePort + 1 {
-		port := <-processedPorts
-
-		if port != 0 {
-			resultPorts = append(resultPorts, port)
+		if debug {
+			ui.PrintfErr(err.Error())
 		}
 	}
 
-	close(ports)
-	close(processedPorts)
-
-	PrintfSuc("========================= OPEN PORTS ===========================")
+	ui.PrintfSuc("========================= OPEN PORTS ===========================")
 
 	sort.Ints(resultPorts)
 	for _, p := range resultPorts {
-		PrintfSuc("[+] %d", p)
+		ui.PrintfSuc("[+] %d", p)
 	}
 
 	if outputFile != "" {
@@ -183,6 +91,6 @@ func main() {
 
 		d := strings.Join(strP, "\n")
 
-		outputToFile(outputFile, d, outputFormat)
+		output.OutputToFile(outputFile, d, outputFormat)
 	}
 }
